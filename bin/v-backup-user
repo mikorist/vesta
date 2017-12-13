@@ -49,7 +49,7 @@ mkdir -p $BACKUP
 start_time=$(date '+%s')
 
 # Set notification email and subject
-subj="$user → backup failed"
+subj="$user â backup failed"
 email=$(grep CONTACT $VESTA/data/users/admin/user.conf |cut -f 2 -d \')
 
 # Checking load average
@@ -70,7 +70,6 @@ done
 
 # Creating temporary directory
 tmpdir=$(mktemp -p $BACKUP -d)
-
 if [ "$?" -ne 0 ]; then
     echo "Can't create tmp dir $tmpdir" |$SENDMAIL -s "$subj" $email $notify
     check_result $E_NOTEXIST "can't create tmp dir"
@@ -138,8 +137,7 @@ if [ ! -z "$WEB_SYSTEM" ] && [ "$WEB" != '*' ]; then
         mkdir -p $tmpdir/web/$domain/vesta
 
         # Get domain variables
-        domain_idn=$domain
-        format_domain_idn
+        domain_idn=$(idn -t --quiet -a "$domain")
         get_domain_values 'web'
 
         # Backup web.conf
@@ -148,60 +146,36 @@ if [ ! -z "$WEB_SYSTEM" ] && [ "$WEB" != '*' ]; then
         grep "DOMAIN='$domain'" $conf > vesta/web.conf
 
         # Backup vhost config
-        conf=$HOMEDIR/$user/conf/web/$domain.$WEB_SYSTEM.conf
-        if [ -e "$conf" ]; then
-            cp $conf conf/$WEB_SYSTEM.conf
-        else
-            # old style configs
-            tpl_file="$WEBTPL/$WEB_SYSTEM/$WEB_BACKEND/$TPL.tpl"
-            conf="$HOMEDIR/$user/conf/web/$WEB_SYSTEM.conf"
-            get_web_config_lines $tpl_file $conf
-            sed -n "$top_line,$bottom_line p" $conf > conf/$WEB_SYSTEM.conf
-        fi
+        tpl_file="$WEBTPL/$WEB_SYSTEM/$WEB_BACKEND/$TPL.tpl"
+        conf="$HOMEDIR/$user/conf/web/$WEB_SYSTEM.conf"
+        get_web_config_lines $tpl_file $conf
+        sed -n "$top_line,$bottom_line p" $conf > conf/$WEB_SYSTEM.conf
 
         # Backup ssl vhost
         if [ "$SSL" = 'yes' ]; then
-            conf=$HOMEDIR/$user/conf/web/$domain.$WEB_SYSTEM.ssl.conf
-            if [ -e "$conf" ]; then
-                cp $conf conf/$WEB_SYSTEM.ssl.conf
-            else
-                tpl_file="$WEBTPL/$WEB_SYSTEM/$WEB_BACKEND/$TPL.stpl"
-                conf="$HOMEDIR/$user/conf/web/s$WEB_SYSTEM.conf"
-                get_web_config_lines $tpl_file $conf
-                sed -n "$top_line,$bottom_line p" $conf > \
-                    conf/s$WEB_SYSTEM.conf
-            fi
+            tpl_file="$WEBTPL/$WEB_SYSTEM/$WEB_BACKEND/$TPL.stpl"
+            conf="$HOMEDIR/$user/conf/web/s$WEB_SYSTEM.conf"
+            get_web_config_lines $tpl_file $conf
+            sed -n "$top_line,$bottom_line p" $conf > conf/s$WEB_SYSTEM.conf
         fi
 
         # Backup proxy config
         if [ ! -z "$PROXY_SYSTEM" ] && [ ! -z "$PROXY" ]; then
-            conf=$HOMEDIR/$user/conf/web/$domain.$PROXY_SYSTEM.conf
-            if [ -e "$conf" ]; then
-                cp $conf conf/$PROXY_SYSTEM.conf
-            else
-                tpl_file="$WEBTPL/$PROXY_SYSTEM/$PROXY.tpl"
-                conf="$HOMEDIR/$user/conf/web/$PROXY_SYSTEM.conf"
-                get_web_config_lines $tpl_file $conf
-                sed -n "$top_line,$bottom_line p" $conf > \
-                    conf/$PROXY_SYSTEM.conf
-            fi
+            tpl_file="$WEBTPL/$PROXY_SYSTEM/$PROXY.tpl"
+            conf="$HOMEDIR/$user/conf/web/$PROXY_SYSTEM.conf"
+            get_web_config_lines $tpl_file $conf
+            sed -n "$top_line,$bottom_line p" $conf > conf/$PROXY_SYSTEM.conf
         fi
 
         # Backup ssl proxy config
         if [ ! -z "$PROXY_SYSTEM" ] && [ "$SSL" = 'yes' ]; then
-            conf=$HOMEDIR/$user/conf/web/$domain.$PROXY_SYSTEM.ssl.conf
-            if [ -e "$conf" ]; then
-                cp $conf conf/$PROXY_SYSTEM.ssl.conf
-            else
-                tpl_file="$WEBTPL/$PROXY_SYSTEM/$PROXY.stpl"
-                conf="$HOMEDIR/$user/conf/web/s$PROXY_SYSTEM.conf"
-                get_web_config_lines $tpl_file $conf
-                sed -n "$top_line,$bottom_line p" $conf >\
-                    conf/s$PROXY_SYSTEM.conf
-            fi
+            tpl_file="$WEBTPL/$PROXY_SYSTEM/$PROXY.stpl"
+            conf="$HOMEDIR/$user/conf/web/s$PROXY_SYSTEM.conf"
+            get_web_config_lines $tpl_file $conf
+            sed -n "$top_line,$bottom_line p" $conf > conf/s$PROXY_SYSTEM.conf
         fi
 
-        # Backup custom config / backup LE config
+        # Backup custom config
         for sconfig in $(ls $HOMEDIR/$user/conf/web/|grep ".$domain.conf"); do
             cp $HOMEDIR/$user/conf/web/$sconfig conf/
         done
@@ -232,7 +206,7 @@ if [ ! -z "$WEB_SYSTEM" ] && [ "$WEB" != '*' ]; then
         tar -cpf $tmpdir/web/$domain/domain_data.tar * ${fargs[@]}
 
         # Compress archive
-        gzip -$BACKUP_GZIP $tmpdir/web/$domain/domain_data.tar
+        pigz -9 -p 16 -$BACKUP_GZIP $tmpdir/web/$domain/domain_data.tar
     done
 
     # Print total
@@ -312,8 +286,7 @@ if [ ! -z "$MAIL_SYSTEM" ] && [ "$MAIL" != '*' ]; then
         echo -e "$(date "+%F %T") $domain" |tee -a $BACKUP/$user.log
         mkdir -p $tmpdir/mail/$domain/conf
         mkdir -p $tmpdir/mail/$domain/vesta
-        domain_idn=$domain
-        format_domain_idn
+        domain_idn=$(idn -t --quiet -a "$domain")
 
         # Backup exim config
         if [[ "$MAIL_SYSTEM" =~ exim ]]; then
@@ -349,7 +322,7 @@ if [ ! -z "$MAIL_SYSTEM" ] && [ "$MAIL" != '*' ]; then
 
         # Compress archive
         if [ -e "$tmpdir/mail/$domain/accounts.tar" ]; then
-            gzip -$BACKUP_GZIP $tmpdir/mail/$domain/accounts.tar
+            pigz -9 -p 16 -$BACKUP_GZIP $tmpdir/mail/$domain/accounts.tar
         fi
     done
 
@@ -400,7 +373,7 @@ if [ ! -z "$DB_SYSTEM" ] && [ "$DB" != '*' ]; then
         esac
 
         # Compress dump
-        gzip -$BACKUP_GZIP $dump
+        pigz -9 -p 16 -$BACKUP_GZIP $dump
     done
 
     # Print total
@@ -472,7 +445,7 @@ if [ "$USER" != '*' ]; then
             tar -cpf $tmpdir/user_dir/$udir.tar $udir
 
             # Compress arhive
-            gzip -$BACKUP_GZIP $tmpdir/user_dir/$udir.tar
+            pigz -9 -p 16 -$BACKUP_GZIP $tmpdir/user_dir/$udir.tar
         fi
     done
     set +f
@@ -496,18 +469,18 @@ end_time=$(date '+%s')
 time_n_date=$(date +'%T %F')
 time=$(echo "$time_n_date" |cut -f 1 -d \ )
 date=$(echo "$time_n_date" |cut -f 2 -d \ )
-backup_new_date=$(date +"%Y-%m-%d_%H-%M-%S")
 
 # Defining local storage function
 local_backup(){
 
-    rm -f $BACKUP/$user.$backup_new_date.tar
+    rm -f $BACKUP/$user.$date.tar
 
     # Checking retention
-    backup_list=$(ls -lrt $BACKUP/ |awk '{print $9}' |grep "^$user\." | grep ".tar")
+    backup_list=$(ls -lrt $BACKUP/ |awk '{print $9}' |grep "^$user\.")
     backups_count=$(echo "$backup_list" |wc -l)
     if [ "$BACKUPS" -le "$backups_count" ]; then
         backups_rm_number=$((backups_count - BACKUPS))
+        (( ++backups_rm_number))
 
         # Removing old backup
         for backup in $(echo "$backup_list" |head -n $backups_rm_number); do
@@ -530,11 +503,11 @@ local_backup(){
 
     # Creating final tarball
     cd $tmpdir
-    tar -cf $BACKUP/$user.$backup_new_date.tar .
-    chmod 640 $BACKUP/$user.$backup_new_date.tar
-    chown admin:$user $BACKUP/$user.$backup_new_date.tar
+    tar -cf $BACKUP/$user.$date.tar .
+    chmod 640 $BACKUP/$user.$date.tar
+    chown admin:$user $BACKUP/$user.$date.tar
     localbackup='yes'
-    echo -e "$(date "+%F %T") Local: $BACKUP/$user.$backup_new_date.tar" |\
+    echo -e "$(date "+%F %T") Local: $BACKUP/$user.$date.tar" |\
         tee -a $BACKUP/$user.log
 }
 
@@ -582,8 +555,9 @@ ftp_backup() {
         check_result "$E_PARSING" "$error"
     fi
 
+
     # Debug info
-    echo -e "$(date "+%F %T") Remote: ftp://$HOST$BPATH/$user.$backup_new_date.tar"
+    echo -e "$(date "+%F %T") Remote: ftp://$HOST$BPATH/$user.$date.tar"
 
     # Checking ftp connection
     fconn=$(ftpc)
@@ -598,12 +572,8 @@ ftp_backup() {
     fi
 
     # Check ftp permissions
-    if [ -z $BPATH ]; then
-            ftmpdir="vst.bK76A9SUkt"
-        else
-            ftpc "mkdir $BPATH" > /dev/null 2>&1
-            ftmpdir="$BPATH/vst.bK76A9SUkt"
-    fi
+    ftpc "mkdir $BPATH" > /dev/null 2>&1
+    ftmpdir="$BPATH/vst.bK76A9SUkt"
     ftpc "mkdir $ftmpdir" "rm $ftmpdir"
     ftp_result=$(ftpc "mkdir $ftmpdir" "rm $ftmpdir" |grep -v Trying)
     if [ ! -z "$ftp_result" ] ; then
@@ -616,44 +586,28 @@ ftp_backup() {
     fi
 
     # Checking retention
-    if [ -z $BPATH ]; then
-        backup_list=$(ftpc "ls" |awk '{print $9}' |grep "^$user\.")
-    else
-        backup_list=$(ftpc "cd $BPATH" "ls" |awk '{print $9}' |grep "^$user\.")
-    fi
+    backup_list=$(ftpc "cd $BPATH" "ls" |awk '{print $9}' |grep "^$user\.")
     backups_count=$(echo "$backup_list" |wc -l)
     if [ "$backups_count" -ge "$BACKUPS" ]; then
-        backups_rm_number=$((backups_count - BACKUPS))
+        backups_rm_number=$((backups_count - BACKUPS + 1))
         for backup in $(echo "$backup_list" |head -n $backups_rm_number); do 
             backup_date=$(echo $backup |sed -e "s/$user.//" -e "s/.tar$//")
             echo -e "$(date "+%F %T") Rotated ftp backup: $backup_date" |\
                 tee -a $BACKUP/$user.log
-            if [ -z $BPATH ]; then
-                ftpc "delete $backup"
-            else
-                ftpc "cd $BPATH" "delete $backup"
-            fi
+            ftpc "cd $BPATH" "delete $backup"
         done
     fi
 
     # Uploading backup archive
     if [ "$localbackup" = 'yes' ]; then
         cd $BACKUP
-        if [ -z $BPATH ]; then
-            ftpc "put $user.$backup_new_date.tar"
-         else
-            ftpc "cd $BPATH" "put $user.$backup_new_date.tar"
-        fi
+        ftpc "cd $BPATH" "put $user.$date.tar"
     else
         cd $tmpdir
-        tar -cf $BACKUP/$user.$backup_new_date.tar .
+        tar -cf $BACKUP/$user.$date.tar .
         cd $BACKUP/
-        if [ -z $BPATH ]; then
-            ftpc "put $user.$backup_new_date.tar"
-        else
-            ftpc "cd $BPATH" "put $user.$backup_new_date.tar"
-        fi
-        rm -f $user.$backup_new_date.tar
+        ftpc "cd $BPATH" "put $user.$date.tar"
+        rm -f $user.$date.tar
     fi
 }
 
@@ -746,15 +700,11 @@ sftp_backup() {
     fi
 
     # Debug info
-    echo -e "$(date "+%F %T") Remote: sftp://$HOST/$BPATH/$user.$backup_new_date.tar" |\
+    echo -e "$(date "+%F %T") Remote: sftp://$HOST/$BPATH/$user.$date.tar" |\
         tee -a $BACKUP/$user.log
 
     # Checking network connection and write permissions
-    if [ -z $BPATH ]; then
-        sftmpdir="vst.bK76A9SUkt"
-    else
-        sftmpdir="$BPATH/vst.bK76A9SUkt"
-    fi
+    sftmpdir="$BPATH/vst.bK76A9SUkt"
     sftpc "mkdir $BPATH" > /dev/null 2>&1
     sftpc "mkdir $sftmpdir" "rmdir $sftmpdir" > /dev/null 2>&1
     rc=$?
@@ -771,45 +721,29 @@ sftp_backup() {
     fi
 
     # Checking retention
-    if [ -z $BPATH ]; then
-        backup_list=$(sftpc "ls -l" |awk '{print $9}'|grep "^$user\.")
-    else
-        backup_list=$(sftpc "cd $BPATH" "ls -l" |awk '{print $9}'|grep "^$user\.")
-    fi
+    backup_list=$(sftpc "cd $BPATH" "ls -l" |awk '{print $9}'|grep "^$user\.")
     backups_count=$(echo "$backup_list" |wc -l)
     if [ "$backups_count" -ge "$BACKUPS" ]; then
-        backups_rm_number=$((backups_count - BACKUPS))
+        backups_rm_number=$((backups_count - BACKUPS + 1))
         for backup in $(echo "$backup_list" |head -n $backups_rm_number); do
             backup_date=$(echo $backup |sed -e "s/$user.//" -e "s/.tar.*$//")
             echo -e "$(date "+%F %T") Rotated sftp backup: $backup_date" |\
                 tee -a $BACKUP/$user.log
-            if [ -z $BPATH ]; then
-                sftpc "rm $backup" > /dev/null 2>&1
-            else
-                sftpc "cd $BPATH" "rm $backup" > /dev/null 2>&1
-            fi
+            sftpc "cd $BPATH" "rm $backup" > /dev/null 2>&1
         done
     fi
 
     # Uploading backup archive
-    echo "$(date "+%F %T") Uploading $user.$backup_new_date.tar"|tee -a $BACKUP/$user.log
+    echo "$(date "+%F %T") Uploading $user.$date.tar"|tee -a $BACKUP/$user.log
     if [ "$localbackup" = 'yes' ]; then
         cd $BACKUP
-        if [ -z $BPATH ]; then
-            sftpc "put $user.$backup_new_date.tar" "chmod 0600 $user.$backup_new_date.tar" > /dev/null 2>&1
-        else
-            sftpc "cd $BPATH" "put $user.$backup_new_date.tar" "chmod 0600 $user.$backup_new_date.tar" > /dev/null 2>&1
-        fi
+        sftpc "cd $BPATH" "put $user.$date.tar" > /dev/null 2>&1
     else
         cd $tmpdir
-        tar -cf $BACKUP/$user.$backup_new_date.tar .
+        tar -cf $BACKUP/$user.$date.tar .
         cd $BACKUP/
-        if [ -z $BPATH ]; then
-            sftpc "put $user.$backup_new_date.tar" "chmod 0600 $user.$backup_new_date.tar" > /dev/null 2>&1
-        else
-            sftpc "cd $BPATH" "put $user.$backup_new_date.tar" "chmod 0600 $user.$backup_new_date.tar" > /dev/null 2>&1
-        fi
-        rm -f $user.$backup_new_date.tar
+        sftpc "cd $BPATH" "put $user.$date.tar" > /dev/null 2>&1
+        rm -f $user.$date.tar
     fi
 }
 
@@ -821,13 +755,13 @@ google_backup() {
     export BOTO_CONFIG="$VESTA/conf/.google.backup.boto"
 
     # Debug info
-    echo -e "$(date "+%F %T") Remote: gs://$BUCKET/$BPATH/$user.$backup_new_date.tar"
+    echo -e "$(date "+%F %T") Remote: gs://$BUCKET/$BPATH/$user.$date.tar"
 
     # Checking retention
     backup_list=$(${gsutil} ls gs://$BUCKET/$BPATH/$user.* 2>/dev/null)
     backups_count=$(echo "$backup_list" |wc -l)
     if [ "$backups_count" -ge "$BACKUPS" ]; then
-        backups_rm_number=$((backups_count - BACKUPS))
+        backups_rm_number=$((backups_count - BACKUPS + 1))
         for backup in $(echo "$backup_list" |head -n $backups_rm_number); do 
             echo -e "$(date "+%F %T") Roated gcp backup: $backup"
             $gsutil rm $backup > /dev/null 2>&1
@@ -835,19 +769,19 @@ google_backup() {
     fi
 
     # Uploading backup archive
-    echo -e "$(date "+%F %T") Uploading $user.$backup_new_date.tar ..."
+    echo -e "$(date "+%F %T") Uploading $user.$date.tar ..."
     if [ "$localbackup" = 'yes' ]; then
         cd $BACKUP
-        ${gsutil} cp $user.$backup_new_date.tar gs://$BUCKET/$BPATH/ > /dev/null 2>&1
+        ${gsutil} cp $user.$date.tar gs://$BUCKET/$BPATH/ > /dev/null 2>&1
     else
         cd $tmpdir
-        tar -cf $BACKUP/$user.$backup_new_date.tar .
+        tar -cf $BACKUP/$user.$date.tar .
         cd $BACKUP/
-        ${gsutil} cp $user.$backup_new_date.tar gs://$BUCKET/$BPATH/ > /dev/null 2>&1
+        ${gsutil} cp $user.$date.tar gs://$BUCKET/$BPATH/ > /dev/null 2>&1
         rc=$?
-        rm -f $user.$backup_new_date.tar
+        rm -f $user.$date.tar
         if [ "$rc" -ne 0 ]; then
-            check_result "$E_CONNECT" "gsutil failed to upload $user.$backup_new_date.tar"
+            check_result "$E_CONNECT" "gsutil failed to upload $user.$date.tar"
         fi
     fi
 }
@@ -875,12 +809,12 @@ current_time=$(date "+%T")
 if [ "$run_time" -lt 1 ]; then
     run_time=1
 fi
-min=minutes
+min=miutes
 if [ "$run_time" -eq 1 ]; then
     min=minute
 fi
 
-echo "$(date "+%F %T") Size: $size MB" |tee -a $BACKUP/$user.log
+echo "$(date "+%F %T") Size: $size Mb" |tee -a $BACKUP/$user.log
 echo "$(date "+%F %T") Runtime: $run_time $min" |tee -a $BACKUP/$user.log
 
 
@@ -890,10 +824,10 @@ echo "$(date "+%F %T") Runtime: $run_time $min" |tee -a $BACKUP/$user.log
 
 # Removing duplicate
 touch $USER_DATA/backup.conf
-sed -i "/$user.$backup_new_date.tar/d" $USER_DATA/backup.conf
+sed -i "/$user.$date.tar/d" $USER_DATA/backup.conf
 
 # Registering new backup
-backup_str="BACKUP='$user.$backup_new_date.tar'"
+backup_str="BACKUP='$user.$date.tar'"
 backup_str="$backup_str TYPE='$BACKUP_SYSTEM' SIZE='$size'"
 backup_str="$backup_str WEB='${web_list// /,}'"
 backup_str="$backup_str DNS='${dns_list// /,}'"
@@ -917,8 +851,7 @@ update_user_value "$user" '$U_BACKUPS' "$U_BACKUPS"
 
 # Send notification
 if [ -e "$BACKUP/$user.log" ]; then
-    cd $BACKUP
-    subj="$user → backup has been completed"
+    subj="$user â backup has been completed"
     email=$(get_user_value '$CONTACT')
     cat $BACKUP/$user.log |$SENDMAIL -s "$subj" $email $notify
     rm $BACKUP/$user.log
@@ -928,3 +861,4 @@ fi
 log_event "$OK" "$ARGUMENTS"
 
 exit
+
